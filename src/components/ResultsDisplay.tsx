@@ -85,6 +85,21 @@ export default function ResultsDisplay({ response }: ResultsDisplayProps) {
                 </div>
               </div>
             )}
+            {data.dadosUsuario?.vencimento && (
+              <div className="flex items-center gap-3 bg-white rounded-lg px-5 py-4 border border-gray-200 w-max">
+                <div className="bg-green-50 rounded-md p-2">
+                  <Calendar className="h-4 w-4 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">
+                    Vencimento
+                  </p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {data.dadosUsuario.vencimento}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

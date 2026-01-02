@@ -35,6 +35,7 @@ export interface ItemFatura {
 export interface dadosUsuario {
   uc: string;
   mesReferencia: string; // MM/YYYY
+  vencimento: string;
   cliente: {
     nome: string;
     endereco: string;

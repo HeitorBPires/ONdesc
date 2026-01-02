@@ -5,6 +5,19 @@ export interface ValidationError {
   message: string;
 }
 
+function validateVencimento(vencimento: string): boolean {
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(vencimento)) return false;
+
+  const [day, month, year] = vencimento.split("/").map(Number);
+  const date = new Date(year, month - 1, day);
+
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  );
+}
+
 export function validateDadosFaturaCopel(
   data: dadosUsuario
 ): ValidationError[] {
@@ -30,6 +43,20 @@ export function validateDadosFaturaCopel(
     errors.push({
       field: "mesReferencia",
       message: "Formato inválido (MM/YYYY)",
+    });
+  }
+
+  if (!data.vencimento || !validateVencimento(data.vencimento)) {
+    errors.push({
+      field: "vencimento",
+      message: "Vencimento da fatura inválido ou não encontrado",
+    });
+  }
+  // Vencimento
+  if (!data.vencimento) {
+    errors.push({
+      field: "vencimento",
+      message: "Vencimento da fatura não encontrado",
     });
   }
 

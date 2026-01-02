@@ -43,6 +43,13 @@ function extractMesReferencia(text: string): string | null {
   return match ? match[0] : null;
 }
 
+function extractVencimento(text: string): string | null {
+  const regex = /(0[1-9]|1[0-2])\/\d{4}(\d{2}\/\d{2}\/\d{4})R\$/;
+
+  const match = text.match(regex);
+  return match ? match[2] : null;
+}
+
 function extractNome(text: string): string | null {
   const match = text.match(/Nome:\s*(.+)/);
   return match ? match[1].trim() : null;
@@ -108,6 +115,7 @@ export function extractDadosFaturaCopel(rawText: string): dadosUsuario {
   return {
     uc: extractUC(text) ?? "",
     mesReferencia: extractMesReferencia(text) ?? "",
+    vencimento: extractVencimento(text) ?? "",
     cliente: {
       nome: extractNome(text) ?? "",
       endereco: extractEndereco(text) ?? "",
