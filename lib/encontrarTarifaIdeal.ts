@@ -21,7 +21,6 @@ export function encontrarTarifaIdeal(
       tarifa,
       totalFaturaCopel,
       totalFaturaCopelSemTaxas,
-      valorSemDesconto,
       valorSemDescontoSemtaxa
     );
 

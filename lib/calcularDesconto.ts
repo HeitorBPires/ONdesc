@@ -3,13 +3,12 @@ export function calcularDesconto(
   tarifaNovaFatura: number,
   totalFaturaCopel: number,
   totalFaturaCopelSemTaxas: number,
-  valorSemDesconto: number,
   valorSemDescontoSemtaxa: number
 ) {
   const valorNovaFatura = energiaInjetadaKwh * tarifaNovaFatura;
 
   const descontoUsuario =
-    valorSemDesconto - (totalFaturaCopelSemTaxas + valorNovaFatura);
+    valorSemDescontoSemtaxa - (totalFaturaCopelSemTaxas + valorNovaFatura);
 
   const valorTotal = totalFaturaCopel + valorNovaFatura;
   const porcentagemDesconto = valorSemDescontoSemtaxa

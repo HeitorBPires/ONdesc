@@ -174,7 +174,6 @@ export function calculateCopelInvoice(
       energiaInjetadaKwh,
       totalFaturaCopel,
       totalFaturaCopelSemTaxas,
-      valorSemDesconto,
       valorSemDescontoSemtaxa,
       porcentagemDesejada
     );
@@ -195,7 +194,6 @@ export function calculateCopelInvoice(
       tarifaFinal,
       totalFaturaCopel,
       totalFaturaCopelSemTaxas,
-      valorSemDesconto,
       valorSemDescontoSemtaxa
     );
 
