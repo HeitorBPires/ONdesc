@@ -58,10 +58,13 @@ export interface ResultadoFatura {
   totalFaturaCopel: number;
   valorNovaFatura: number;
   descontoUsuario: number;
-  taxaEnergia?: number;
+  tarifaFixa?: number;
   valorTotal: number;
   porcentagemDesconto: number;
   dadosUsuario?: dadosUsuario;
+  porcentagemDesejada?: number;
+  modoCalculo?: "automatico" | "porcentagem" | "taxa";
+  tarifaNovaFatura?: number;
 }
 
 export type ErrorLevel = "critical" | "warning";

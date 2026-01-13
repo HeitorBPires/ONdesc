@@ -23,7 +23,16 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
 
     const file = formData.get("file") as File | null;
-    const tarifa = Number(formData.get("tarifa"));
+
+    const tarifaRaw = formData.get("tarifa");
+    const tarifa =
+      tarifaRaw !== null && tarifaRaw !== "" ? Number(tarifaRaw) : undefined;
+
+    const porcentagemRaw = formData.get("porcentagem");
+    const porcentagem =
+      porcentagemRaw !== null && porcentagemRaw !== ""
+        ? Number(porcentagemRaw)
+        : undefined;
 
     if (!file) {
       errors.push({
@@ -33,10 +42,21 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    if (!isFinite(tarifa)) {
+    if (tarifa !== undefined && (!isFinite(tarifa) || tarifa <= 0)) {
       errors.push({
         field: "tarifa",
         message: "Tarifa inválida",
+        level: "critical",
+      });
+    }
+
+    if (
+      porcentagem !== undefined &&
+      (!isFinite(porcentagem) || porcentagem < 12 || porcentagem > 15)
+    ) {
+      errors.push({
+        field: "porcentagem",
+        message: "Porcentagem inválida (permitido 12% a 15%)",
         level: "critical",
       });
     }
@@ -46,7 +66,6 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = Buffer.from(await file!.arrayBuffer());
-
     const text = await extractTextFromPDF(buffer);
 
     if (!text || text.length < 100) {
@@ -70,7 +89,10 @@ export async function POST(req: NextRequest) {
 
     try {
       itens = parseCopelItems(text);
-      resultado = calculateCopelInvoice(itens, tarifa);
+      resultado = calculateCopelInvoice(itens, {
+        tarifaNovaFatura: tarifa,
+        porcentagemDesejada: porcentagem,
+      });
     } catch (err: any) {
       errors.push({
         field: "calculo",

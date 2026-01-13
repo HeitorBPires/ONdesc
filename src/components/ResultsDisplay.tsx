@@ -108,6 +108,67 @@ export default function ResultsDisplay({ response }: ResultsDisplayProps) {
         <ClienteCard cliente={data.dadosUsuario.cliente} />
       )}
 
+      <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+            Resumo do cálculo
+          </h3>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-700">
+              <span className="text-slate-500">Modo:</span>{" "}
+              <span className="font-semibold text-slate-800">
+                {data.modoCalculo === "automatico" && "Automático"}
+                {data.modoCalculo === "porcentagem" && "Desconto desejado"}
+                {data.modoCalculo === "taxa" && "Taxa manual"}
+              </span>
+            </span>
+
+            {!!data.porcentagemDesejada && (
+              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-700">
+                <span className="text-slate-500">Desconto:</span>{" "}
+                <span className="font-semibold text-slate-800">
+                  {data.porcentagemDesejada.toFixed(1)}%
+                </span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        <p className="mt-2 text-[11px] leading-snug text-slate-500">
+          Tarifa ajustada automaticamente para melhor resultado dentro das
+          regras do cálculo.
+        </p>
+      </div>
+
+      {/* Tarifa Aplicada */}
+      <div className="flex items-center justify-between gap-4 bg-blue-50 border border-blue-200 rounded-lg px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="bg-blue-100 rounded-md p-2">
+            <Zap className="h-5 w-5 text-blue-600" />
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">
+              Tarifa Aplicada
+            </p>
+            <p className="text-lg font-semibold text-blue-900">
+              {formatarMoeda(data.tarifaNovaFatura ? data.tarifaNovaFatura : 0)}{" "}
+              / kWh
+            </p>
+          </div>
+        </div>
+
+        <div className="text-right">
+          <p className="text-xs text-blue-700 font-medium">
+            Base de cálculo da fatura
+          </p>
+          <p className="text-xs text-blue-600">
+            Utilizada no cálculo da energia injetada
+          </p>
+        </div>
+      </div>
+
       {/* Cards Principais */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <CopyableCard valueToCopy={formatarMoeda(data.valorNovaFatura)}>

@@ -1,6 +1,12 @@
 import pdfParse from "pdf-parse";
 import { ItemFatura, ResultadoFatura } from "../types";
 import { isValidNumber } from "../helpers";
+import { encontrarTarifaIdeal } from "./encontrarTarifaIdeal";
+import { calcularDesconto } from "./calcularDesconto";
+import {
+  calcularMetricas,
+  encontrarTarifaPorPorcentagem,
+} from "./encontrarTarifaPorPorcentagem";
 
 export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   const pdfData = await pdfParse(buffer);
@@ -86,23 +92,65 @@ export function parseCopelItems(text: string): ItemFatura[] {
   });
 }
 
+type CalculateOptions = {
+  tarifaNovaFatura?: number;
+  porcentagemDesejada?: number;
+};
+
 export function calculateCopelInvoice(
   itens: ItemFatura[],
-  tarifaNovaFatura: number
+  options?: CalculateOptions
 ): ResultadoFatura {
   if (!Array.isArray(itens) || itens.length === 0) {
     throw new Error("Itens da fatura inválidos");
   }
 
-  if (!isValidNumber(tarifaNovaFatura) || tarifaNovaFatura <= 0) {
+  const { tarifaNovaFatura, porcentagemDesejada } = options || {};
+
+  if (
+    tarifaNovaFatura !== undefined &&
+    (!isValidNumber(tarifaNovaFatura) || tarifaNovaFatura <= 0)
+  ) {
     throw new Error("Tarifa informada é inválida");
   }
 
+  if (porcentagemDesejada !== undefined) {
+    if (
+      !isValidNumber(porcentagemDesejada) ||
+      porcentagemDesejada < 12 ||
+      porcentagemDesejada > 15
+    ) {
+      throw new Error("Porcentagem desejada inválida (permitido 12% a 15%)");
+    }
+  }
+
+  // base
   const valorSemDesconto = itens
     .filter((item) => item.valor > 0)
     .reduce((acc, item) => acc + item.valor, 0);
 
+  const valorSemDescontoSemtaxa = itens
+    .filter((item) => {
+      if (item.valor <= 0) return false;
+      const desc = item.descricao.toUpperCase();
+
+      return !["CONT ILUMIN", "ACRESCIMO", "JUROS", "MULTA"].some((termo) =>
+        desc.includes(termo)
+      );
+    })
+    .reduce((acc, item) => acc + item.valor, 0);
+
   const totalFaturaCopel = itens.reduce((acc, item) => acc + item.valor, 0);
+
+  const totalFaturaCopelSemTaxas = itens
+    .filter((item) => {
+      const desc = item.descricao.toUpperCase();
+
+      return !["CONT ILUMIN", "ACRESCIMO", "JUROS", "MULTA"].some((termo) =>
+        desc.includes(termo)
+      );
+    })
+    .reduce((acc, item) => acc + item.valor, 0);
 
   const itensEnergiaInjetada = itens.filter((item) =>
     item.descricao.includes("ENERGIA INJ. BAND.")
@@ -113,16 +161,43 @@ export function calculateCopelInvoice(
     0
   );
 
-  const valorNovaFatura = energiaInjetadaKwh * tarifaNovaFatura;
+  // determinar modo
+  let modoCalculo: "automatico" | "taxa" | "porcentagem" = "automatico";
+  let tarifaFinal: number;
 
-  const descontoUsuario =
-    valorSemDesconto - (totalFaturaCopel + valorNovaFatura);
+  if (tarifaNovaFatura !== undefined) {
+    modoCalculo = "taxa";
+    tarifaFinal = tarifaNovaFatura;
+  } else if (porcentagemDesejada !== undefined) {
+    modoCalculo = "porcentagem";
+    tarifaFinal = encontrarTarifaPorPorcentagem(
+      energiaInjetadaKwh,
+      totalFaturaCopel,
+      totalFaturaCopelSemTaxas,
+      valorSemDesconto,
+      valorSemDescontoSemtaxa,
+      porcentagemDesejada
+    );
+  } else {
+    modoCalculo = "automatico";
+    tarifaFinal = encontrarTarifaIdeal(
+      energiaInjetadaKwh,
+      totalFaturaCopel,
+      totalFaturaCopelSemTaxas,
+      valorSemDesconto,
+      valorSemDescontoSemtaxa
+    );
+  }
 
-  const valorTotal = totalFaturaCopel + valorNovaFatura;
-
-  const porcentagemDesconto = valorSemDesconto
-    ? (descontoUsuario / valorSemDesconto) * 100
-    : 0;
+  const { valorNovaFatura, descontoUsuario, valorTotal, porcentagemDesconto } =
+    calcularMetricas(
+      energiaInjetadaKwh,
+      tarifaFinal,
+      totalFaturaCopel,
+      totalFaturaCopelSemTaxas,
+      valorSemDesconto,
+      valorSemDescontoSemtaxa
+    );
 
   return {
     itens,
@@ -133,5 +208,10 @@ export function calculateCopelInvoice(
     descontoUsuario,
     valorTotal,
     porcentagemDesconto,
+
+    modoCalculo,
+    porcentagemDesejada:
+      modoCalculo === "porcentagem" ? porcentagemDesejada : undefined,
+    tarifaNovaFatura: tarifaFinal,
   };
 }
