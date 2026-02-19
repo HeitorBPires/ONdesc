@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Settings } from "lucide-react";
 import ResultsDisplay from "@/components/ResultsDisplay";
@@ -10,6 +10,14 @@ import { SignOutButton } from "@/components/auth/SignOutButton";
 type CalculationMode = "automatico" | "taxa" | "porcentagem";
 
 export default function CalculationPage() {
+  return (
+    <Suspense fallback={null}>
+      <CalculationPageContent />
+    </Suspense>
+  );
+}
+
+function CalculationPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const clientId = useMemo(
