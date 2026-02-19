@@ -5,10 +5,10 @@ export interface ValidationError {
   message: string;
 }
 
-function validateVencimento(vencimento: string): boolean {
-  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(vencimento)) return false;
+function validateDateBR(dateString: string): boolean {
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(dateString)) return false;
 
-  const [day, month, year] = vencimento.split("/").map(Number);
+  const [day, month, year] = dateString.split("/").map(Number);
   const date = new Date(year, month - 1, day);
 
   return (
@@ -19,14 +19,14 @@ function validateVencimento(vencimento: string): boolean {
 }
 
 export function validateDadosFaturaCopel(
-  data: dadosUsuario
+  data: dadosUsuario,
 ): ValidationError[] {
   const errors: ValidationError[] = [];
 
   // UC
   if (!data.uc) {
     errors.push({ field: "uc", message: "UC não encontrada" });
-  } else if (!/^\d{8,15}$/.test(data.uc)) {
+  } else if (!/^\d{7,15}$/.test(data.uc)) {
     errors.push({
       field: "uc",
       message: "UC inválida (esperado 8 a 15 dígitos)",
@@ -46,7 +46,7 @@ export function validateDadosFaturaCopel(
     });
   }
 
-  if (!data.vencimento || !validateVencimento(data.vencimento)) {
+  if (!data.vencimento || !validateDateBR(data.vencimento)) {
     errors.push({
       field: "vencimento",
       message: "Vencimento da fatura inválido ou não encontrado",
@@ -57,6 +57,13 @@ export function validateDadosFaturaCopel(
     errors.push({
       field: "vencimento",
       message: "Vencimento da fatura não encontrado",
+    });
+  }
+
+  if (!data.proximaLeitura || !validateDateBR(data.proximaLeitura)) {
+    errors.push({
+      field: "proximaLeitura",
+      message: "Próxima leitura inválida ou não encontrada",
     });
   }
 

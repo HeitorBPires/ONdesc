@@ -19,7 +19,7 @@ function extractUC(text: string): string | null {
     const curr = lines[i];
     const next = lines[i + 1] ?? "";
 
-    const isOnlyDigits = /^\d{8,15}$/.test(curr);
+    const isOnlyDigits = /^\d{7,15}$/.test(curr);
     const prevHasDate = /\d{2}\/\d{2}\/\d{4}/.test(prev);
     const nextHasMesRef = /\d{2}\/\d{4}/.test(next);
 
@@ -29,7 +29,7 @@ function extractUC(text: string): string | null {
   }
 
   for (const line of lines) {
-    if (/^\d{8,15}$/.test(line) && !line.includes("UC ")) {
+    if (/^\d{7,15}$/.test(line) && !line.includes("UC ")) {
       return line;
     }
   }
@@ -48,6 +48,39 @@ function extractVencimento(text: string): string | null {
 
   const match = text.match(regex);
   return match ? match[2] : null;
+}
+
+function extractProximaLeitura(text: string): string | null {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  for (let i = 0; i < lines.length; i++) {
+    const prev = lines[i - 1] ?? "";
+    const curr = lines[i];
+    const next = lines[i + 1] ?? "";
+
+    const isOnlyDigits = /^\d{7,15}$/.test(curr);
+    const nextHasMesRef = /\d{2}\/\d{4}/.test(next);
+    const dates = prev.match(/\d{2}\/\d{2}\/\d{4}/g);
+
+    if (isOnlyDigits && nextHasMesRef && dates && dates.length >= 3) {
+      return dates[2];
+    }
+  }
+
+  const fallbackMatch = text.match(
+    /(\d{2}\/\d{2}\/\d{4})\s*(\d{2}\/\d{2}\/\d{4})\s*\d{1,3}\s*(\d{2}\/\d{2}\/\d{4})/,
+  );
+  if (fallbackMatch) {
+    return fallbackMatch[3];
+  }
+
+  const labeledMatch = text.match(
+    /pr[oó]xima\s+leitura[:\s]*([0-3]\d\/[01]\d\/\d{4})/i,
+  );
+  return labeledMatch ? labeledMatch[1] : null;
 }
 
 function extractNome(text: string): string | null {
@@ -79,7 +112,7 @@ function extractCEP(text: string): string | null {
 }
 
 function extractCidadeEstado(
-  text: string
+  text: string,
 ): { cidade: string; estado: string } | null {
   const match = text.match(/Cidade:\s*(.+?)\s*-\s*Estado:\s*([A-Z]{2})/);
   if (!match) return null;
@@ -116,6 +149,7 @@ export function extractDadosFaturaCopel(rawText: string): dadosUsuario {
     uc: extractUC(text) ?? "",
     mesReferencia: extractMesReferencia(text) ?? "",
     vencimento: extractVencimento(text) ?? "",
+    proximaLeitura: extractProximaLeitura(text) ?? "",
     cliente: {
       nome: extractNome(text) ?? "",
       endereco: extractEndereco(text) ?? "",

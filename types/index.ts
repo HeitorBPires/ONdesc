@@ -36,6 +36,7 @@ export interface dadosUsuario {
   uc: string;
   mesReferencia: string; // MM/YYYY
   vencimento: string;
+  proximaLeitura: string;
   cliente: {
     nome: string;
     endereco: string;
@@ -65,6 +66,10 @@ export interface ResultadoFatura {
   porcentagemDesejada?: number;
   modoCalculo?: "automatico" | "porcentagem" | "taxa";
   tarifaNovaFatura?: number;
+  tarifaCopel: number;
+  consumoMes: number;
+  clientId?: string;
+  monthlyCalculationId?: string | null;
 }
 
 export type ErrorLevel = "critical" | "warning";

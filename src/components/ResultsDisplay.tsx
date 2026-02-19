@@ -12,12 +12,19 @@ import {
 
 import { ApiResponse, ApiError, ResultadoFatura } from "../../types";
 
-import { formatarKwh, formatarMoeda } from "../../lib/formatValues";
+import {
+  formatarKwh,
+  formatarMoeda,
+  formatarNumeroBR,
+} from "../../lib/formatValues";
 import { ClienteCard } from "./ClientCard";
 import { ValidationAlert } from "./ValidationAlert";
 import { CriticalErrorState } from "./CriticalErrorState";
 import { CopyableCard } from "./CopyableCard";
 import { CopyButton } from "./CopyButton";
+import { useState } from "react";
+import { toast, ToastContainer } from "react-toastify";
+import { useRouter } from "next/navigation";
 
 interface ResultsDisplayProps {
   response: ApiResponse<ResultadoFatura>;
@@ -30,10 +37,35 @@ function splitErrors(errors: ApiError[] = []) {
   };
 }
 
-export default function ResultsDisplay({ response }: ResultsDisplayProps) {
-  const { critical, warning } = splitErrors(response.errors);
+function errorToast(message: string) {
+  toast(
+    () => (
+      <div className="flex flex-col">
+        <span className="font-semibold">Erro</span>
+        <span className="text-sm">{message}</span>
+      </div>
+    ),
+    {
+      type: "error",
+      position: "top-right",
+      autoClose: 5000,
+      hideProgressBar: true,
+      closeOnClick: true,
+      pauseOnHover: false,
+      draggable: true,
+      progress: undefined,
+      theme: "light",
+    },
+  );
+}
 
-  // ❌ ERRO CRÍTICO → bloqueia tela
+export default function ResultsDisplay({
+  response,
+}: ResultsDisplayProps) {
+  const router = useRouter();
+  const { critical, warning } = splitErrors(response.errors);
+  const [isGenerating, setIsGenerating] = useState(false);
+
   if (critical.length > 0 || !response.data) {
     return (
       <CriticalErrorState
@@ -42,8 +74,114 @@ export default function ResultsDisplay({ response }: ResultsDisplayProps) {
     );
   }
 
-  // ✅ DADOS DISPONÍVEIS
   const data = response.data;
+
+  async function handleGenerateBoleto() {
+    try {
+      setIsGenerating(true);
+      if (!data.clientId) {
+        errorToast("clientId inválido para gerar boleto.");
+        setIsGenerating(false);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("clientId", data.clientId);
+      formData.append(
+        "monthlyCalculationId",
+        data.monthlyCalculationId ? String(data.monthlyCalculationId) : "",
+      );
+
+      formData.append(
+        "data",
+        JSON.stringify({
+          cliente: data.dadosUsuario?.cliente,
+          uc: data.dadosUsuario?.uc,
+          valorFatura: formatarNumeroBR(data.valorNovaFatura),
+          vencimento: data.dadosUsuario?.vencimento,
+          mesReferencia: data.dadosUsuario?.mesReferencia,
+          porcentagemDesconto: formatarNumeroBR(data.porcentagemDesconto),
+          descontoUsuario: formatarNumeroBR(data.descontoUsuario),
+          tarifaCopel: formatarNumeroBR(data.tarifaCopel),
+          tarifaOndesc: formatarNumeroBR(data.tarifaNovaFatura as number),
+          consumoMes: data.consumoMes.toFixed(0),
+          energiaInjetada: data.energiaInjetadaKwh.toFixed(0),
+          valorSemOndesc: formatarNumeroBR(data.valorSemDesconto),
+          valorTotalComOndesc: formatarNumeroBR(data.valorTotal),
+        }),
+      );
+
+      const res = await fetch("/api/ondesc-invoice", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.status === 401) {
+        router.replace("/login");
+        setIsGenerating(false);
+        return;
+      }
+
+      const contentType = res.headers.get("Content-Type") || "";
+
+      // ✅ Se deu erro no backend (400/422/500 etc)
+      if (!res.ok) {
+        let errorMessage = "Erro ao gerar PDF.";
+        try {
+          if (contentType.includes("application/json")) {
+            const errJson = await res.json();
+            errorMessage = errJson?.error || errorMessage;
+            console.error("Erro backend:", errJson);
+          } else {
+            const errText = await res.text();
+            console.error("Erro backend (text):", errText);
+            errorMessage = errText || errorMessage;
+          }
+        } catch (e) {
+          console.error("Falha ao ler resposta de erro:", e);
+        }
+
+        errorToast(errorMessage);
+        setIsGenerating(false);
+        return;
+      }
+
+      if (!contentType.includes("application/pdf")) {
+        const text = await res.text().catch(() => "");
+        console.error("Resposta inesperada:", contentType, text);
+        errorToast("Resposta inesperada do servidor. Não veio PDF.");
+        setIsGenerating(false);
+        return;
+      }
+
+      const blob = await res.blob();
+
+      const contentDisposition = res.headers.get("Content-Disposition");
+      let filename = "arquivo.pdf";
+
+      if (contentDisposition) {
+        // pega o filename="..."
+        const match = contentDisposition.match(/filename="(.+)"/);
+        if (match?.[1]) filename = match[1];
+      }
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      window.URL.revokeObjectURL(url);
+      setIsGenerating(false);
+      router.push("/");
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      errorToast("Erro inesperado ao gerar PDF.");
+      setIsGenerating(false);
+    }
+  }
 
   return (
     <div className="w-full space-y-6">
@@ -108,63 +246,74 @@ export default function ResultsDisplay({ response }: ResultsDisplayProps) {
         <ClienteCard cliente={data.dadosUsuario.cliente} />
       )}
 
-      <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-            Resumo do cálculo
-          </h3>
+      {/* Tarifa aplicada + modo do cálculo (unificado) */}
+      <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 via-slate-50 to-white px-5 py-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          {/* Esquerda - Tarifa aplicada */}
+          <div className="flex items-start gap-3">
+            <div className="bg-blue-100 rounded-lg p-2 border border-blue-200">
+              <Zap className="h-5 w-5 text-blue-700" />
+            </div>
 
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-700">
-              <span className="text-slate-500">Modo:</span>{" "}
-              <span className="font-semibold text-slate-800">
-                {data.modoCalculo === "automatico" && "Automático"}
-                {data.modoCalculo === "porcentagem" && "Desconto desejado"}
-                {data.modoCalculo === "taxa" && "Taxa manual"}
-              </span>
-            </span>
+            <div>
+              <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide">
+                Tarifa aplicada
+              </p>
 
-            {!!data.porcentagemDesejada && (
-              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-700">
-                <span className="text-slate-500">Desconto:</span>{" "}
+              <div className="mt-0.5 flex flex-wrap items-end gap-2">
+                <p className="text-2xl font-bold text-blue-950 leading-none">
+                  {formatarMoeda(
+                    data.tarifaNovaFatura ? data.tarifaNovaFatura : 0,
+                  )}
+                </p>
+
+                <span className="text-sm font-semibold text-blue-700 mb-[2px]">
+                  / kWh
+                </span>
+              </div>
+
+              <p className="mt-1 text-[11px] text-blue-700/80 leading-snug">
+                Base de cálculo utilizada na energia injetada.
+              </p>
+            </div>
+          </div>
+
+          {/* Direita - Resumo do cálculo */}
+          <div className="flex flex-col items-start md:items-end gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Resumo do cálculo
+            </p>
+
+            <div className="flex flex-wrap gap-2">
+              {/* Chip Modo */}
+              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 shadow-sm">
+                <span className="text-slate-500">Modo:</span>{" "}
                 <span className="font-semibold text-slate-800">
-                  {data.porcentagemDesejada.toFixed(1)}%
+                  {data.modoCalculo === "automatico" && "Automático"}
+                  {data.modoCalculo === "porcentagem" && "Desconto desejado"}
+                  {data.modoCalculo === "taxa" && "Taxa manual"}
                 </span>
               </span>
-            )}
+
+              {/* Chip porcentagem (somente se existir) */}
+              {!!data.porcentagemDesejada &&
+                data.modoCalculo === "porcentagem" && (
+                  <span className="rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs text-green-800 shadow-sm">
+                    <span className="text-green-700/70">Desconto:</span>{" "}
+                    <span className="font-bold text-green-900">
+                      {data.porcentagemDesejada.toFixed(1)}%
+                    </span>
+                  </span>
+                )}
+            </div>
           </div>
         </div>
 
-        <p className="mt-2 text-[11px] leading-snug text-slate-500">
-          Tarifa ajustada automaticamente para melhor resultado dentro das
-          regras do cálculo.
-        </p>
-      </div>
-
-      {/* Tarifa Aplicada */}
-      <div className="flex items-center justify-between gap-4 bg-blue-50 border border-blue-200 rounded-lg px-5 py-4">
-        <div className="flex items-center gap-3">
-          <div className="bg-blue-100 rounded-md p-2">
-            <Zap className="h-5 w-5 text-blue-600" />
-          </div>
-
-          <div>
-            <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">
-              Tarifa Aplicada
-            </p>
-            <p className="text-lg font-semibold text-blue-900">
-              {formatarMoeda(data.tarifaNovaFatura ? data.tarifaNovaFatura : 0)}{" "}
-              / kWh
-            </p>
-          </div>
-        </div>
-
-        <div className="text-right">
-          <p className="text-xs text-blue-700 font-medium">
-            Base de cálculo da fatura
-          </p>
-          <p className="text-xs text-blue-600">
-            Utilizada no cálculo da energia injetada
+        {/* Linha inferior - info curta */}
+        <div className="mt-4 border-t border-blue-100 pt-3">
+          <p className="text-[11px] leading-snug text-slate-500">
+            A tarifa é definida automaticamente para obter o melhor resultado
+            dentro das regras do cálculo.
           </p>
         </div>
       </div>
@@ -257,6 +406,38 @@ export default function ResultsDisplay({ response }: ResultsDisplayProps) {
         </div>
       </div>
 
+      {/* CTA - Gerar Boleto (principal) */}
+      {/* Ação principal */}
+      <button
+        onClick={handleGenerateBoleto}
+        disabled={isGenerating}
+        className={[
+          "w-full",
+          "inline-flex items-center justify-center gap-2",
+          "rounded-xl px-6 py-4",
+          "text-base font-semibold",
+          "text-white",
+          "bg-linear-to-r from-blue-600 to-indigo-600",
+          "shadow-lg shadow-indigo-600/20",
+          "hover:brightness-110 transition",
+          "active:scale-[0.99]",
+          "focus:outline-none focus:ring-4 focus:ring-indigo-500/25",
+          "disabled:opacity-60 disabled:cursor-not-allowed",
+        ].join(" ")}
+      >
+        {isGenerating ? (
+          <>
+            <span className="h-5 w-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+            Gerando boleto...
+          </>
+        ) : (
+          <>
+            <FileText className="h-5 w-5" />
+            Gerar boleto com estes valores
+          </>
+        )}
+      </button>
+
       {/* Tabela de Itens */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-sm transition">
         <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
@@ -315,6 +496,7 @@ export default function ResultsDisplay({ response }: ResultsDisplayProps) {
           </table>
         </div>
       </div>
+      <ToastContainer />
     </div>
   );
 }

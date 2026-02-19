@@ -2,7 +2,6 @@ import pdfParse from "pdf-parse";
 import { ItemFatura, ResultadoFatura } from "../types";
 import { isValidNumber } from "../helpers";
 import { encontrarTarifaIdeal } from "./encontrarTarifaIdeal";
-import { calcularDesconto } from "./calcularDesconto";
 import {
   calcularMetricas,
   encontrarTarifaPorPorcentagem,
@@ -34,7 +33,7 @@ export function parseCopelItems(text: string): ItemFatura[] {
 
   const unidadesPossiveis = ["kWh", "UN"];
   const firstUnitIndex = tableLines.findIndex((l) =>
-    unidadesPossiveis.includes(l)
+    unidadesPossiveis.includes(l),
   );
 
   if (firstUnitIndex === -1) {
@@ -56,26 +55,26 @@ export function parseCopelItems(text: string): ItemFatura[] {
   const unidades = tableLines.slice(offset, offset + totalItens);
   const quantidades = tableLines.slice(
     offset + totalItens,
-    offset + totalItens * 2 - (UNLength || 0)
+    offset + totalItens * 2 - (UNLength || 0),
   );
   const precosUnitarios = tableLines.slice(
     offset + totalItens * 2 - (UNLength || 0),
-    offset + totalItens * 3 - (UNLength || 0)
+    offset + totalItens * 3 - (UNLength || 0),
   );
   const valores = tableLines.slice(
     offset + totalItens * 3 - (UNLength || 0),
-    offset + totalItens * 4 - (UNLength || 0)
+    offset + totalItens * 4 - (UNLength || 0),
   );
 
   return descricoes.map((descricao, index) => {
     const quantidade = Number(
-      (quantidades[index] ?? "0").replace(/\./g, "").replace(",", ".")
+      (quantidades[index] ?? "0").replace(/\./g, "").replace(",", "."),
     );
     const precoUnitario = Number(
-      (precosUnitarios[index] ?? "0").replace(/\./g, "").replace(",", ".")
+      (precosUnitarios[index] ?? "0").replace(/\./g, "").replace(",", "."),
     );
     const valor = Number(
-      (valores[index] ?? "0").replace(/\./g, "").replace(",", ".")
+      (valores[index] ?? "0").replace(/\./g, "").replace(",", "."),
     );
 
     if (![quantidade, precoUnitario, valor].every(isValidNumber)) {
@@ -99,7 +98,7 @@ type CalculateOptions = {
 
 export function calculateCopelInvoice(
   itens: ItemFatura[],
-  options?: CalculateOptions
+  options?: CalculateOptions,
 ): ResultadoFatura {
   if (!Array.isArray(itens) || itens.length === 0) {
     throw new Error("Itens da fatura inválidos");
@@ -130,13 +129,10 @@ export function calculateCopelInvoice(
     .reduce((acc, item) => acc + item.valor, 0);
 
   const valorSemDescontoSemtaxa = itens
+    .filter((item) => item.valor > 0)
     .filter((item) => {
-      if (item.valor <= 0) return false;
-      const desc = item.descricao.toUpperCase();
-
-      return !["CONT ILUMIN", "ACRESCIMO", "JUROS", "MULTA"].some((termo) =>
-        desc.includes(termo)
-      );
+      const unidade = (item.unidade ?? "").toUpperCase().trim();
+      return unidade !== "UN";
     })
     .reduce((acc, item) => acc + item.valor, 0);
 
@@ -144,21 +140,18 @@ export function calculateCopelInvoice(
 
   const totalFaturaCopelSemTaxas = itens
     .filter((item) => {
-      const desc = item.descricao.toUpperCase();
-
-      return !["CONT ILUMIN", "ACRESCIMO", "JUROS", "MULTA"].some((termo) =>
-        desc.includes(termo)
-      );
+      const unidade = (item.unidade ?? "").toUpperCase().trim();
+      return unidade !== "UN";
     })
     .reduce((acc, item) => acc + item.valor, 0);
 
   const itensEnergiaInjetada = itens.filter((item) =>
-    item.descricao.includes("ENERGIA INJ. BAND.")
+    item.descricao.includes("ENERGIA INJ. OUC MPT TE"),
   );
 
   const energiaInjetadaKwh = itensEnergiaInjetada.reduce(
     (acc, item) => acc + Math.abs(item.quantidade),
-    0
+    0,
   );
 
   // determinar modo
@@ -175,7 +168,7 @@ export function calculateCopelInvoice(
       totalFaturaCopel,
       totalFaturaCopelSemTaxas,
       valorSemDescontoSemtaxa,
-      porcentagemDesejada
+      porcentagemDesejada,
     );
   } else {
     modoCalculo = "automatico";
@@ -184,7 +177,7 @@ export function calculateCopelInvoice(
       totalFaturaCopel,
       totalFaturaCopelSemTaxas,
       valorSemDesconto,
-      valorSemDescontoSemtaxa
+      valorSemDescontoSemtaxa,
     );
   }
 
@@ -194,8 +187,14 @@ export function calculateCopelInvoice(
       tarifaFinal,
       totalFaturaCopel,
       totalFaturaCopelSemTaxas,
-      valorSemDescontoSemtaxa
+      valorSemDescontoSemtaxa,
     );
+
+  const consumoMes =
+    itens.find((item) => item.descricao.includes("ENERGIA ELET CONSUMO"))
+      ?.quantidade || 0;
+
+  const tarifaCopel = valorSemDescontoSemtaxa / consumoMes;
 
   return {
     itens,
@@ -211,5 +210,7 @@ export function calculateCopelInvoice(
     porcentagemDesejada:
       modoCalculo === "porcentagem" ? porcentagemDesejada : undefined,
     tarifaNovaFatura: tarifaFinal,
+    tarifaCopel,
+    consumoMes,
   };
 }

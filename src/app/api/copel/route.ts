@@ -7,6 +7,7 @@ import {
 import { ItemFatura, ResultadoFatura } from "../../../../types";
 import { extractDadosFaturaCopel } from "../../../../lib/extractDados";
 import { validateDadosFaturaCopel } from "../../../../lib/validateDadosUsuario";
+import { requireUser } from "@/lib/auth/require-user";
 
 export type ErrorLevel = "critical" | "warning";
 
@@ -18,6 +19,11 @@ export interface ApiError {
 
 export async function POST(req: NextRequest) {
   const errors: ApiError[] = [];
+  const { unauthorizedResponse } = await requireUser();
+
+  if (unauthorizedResponse) {
+    return unauthorizedResponse;
+  }
 
   try {
     const formData = await req.formData();
@@ -67,7 +73,6 @@ export async function POST(req: NextRequest) {
 
     const buffer = Buffer.from(await file!.arrayBuffer());
     const text = await extractTextFromPDF(buffer);
-
     if (!text || text.length < 100) {
       return NextResponse.json(
         {
@@ -80,7 +85,7 @@ export async function POST(req: NextRequest) {
             },
           ],
         },
-        { status: 422 }
+        { status: 422 },
       );
     }
 
@@ -89,14 +94,17 @@ export async function POST(req: NextRequest) {
 
     try {
       itens = parseCopelItems(text);
+
       resultado = calculateCopelInvoice(itens, {
         tarifaNovaFatura: tarifa,
         porcentagemDesejada: porcentagem,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Erro ao processar cálculo";
       errors.push({
         field: "calculo",
-        message: err.message,
+        message,
         level: "critical",
       });
     }
@@ -109,7 +117,7 @@ export async function POST(req: NextRequest) {
         field: e.field,
         message: e.message,
         level: "warning",
-      })
+      }),
     );
 
     return NextResponse.json({
@@ -136,7 +144,7 @@ export async function POST(req: NextRequest) {
           },
         ],
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
