@@ -1,4 +1,4 @@
-# ONDesc Billing Platform
+# ONDesc Energy
 
 Aplicação web para operação de faturamento da ONDesc Energy, usada para:
 
