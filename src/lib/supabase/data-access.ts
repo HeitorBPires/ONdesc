@@ -604,7 +604,7 @@ export async function listMonthlyCalculationsByClient(
 
   const history = (Array.isArray(data) ? data : [])
     .filter(
-      (item): item is Record<string, unknown> =>
+      (item): item is { id: unknown; client_id: unknown; ref_month: unknown; stage: unknown } =>
         typeof item === "object" &&
         item !== null &&
         "id" in item &&
@@ -612,7 +612,7 @@ export async function listMonthlyCalculationsByClient(
         "ref_month" in item &&
         "stage" in item,
     )
-    .map(mapMonthlyCalculationHistoryRow)
+    .map((item) => mapMonthlyCalculationHistoryRow(item as Record<string, unknown>))
     .filter((item) => item.id && item.refMonth);
 
   history.sort((a, b) => parseRefMonth(b.refMonth) - parseRefMonth(a.refMonth));
