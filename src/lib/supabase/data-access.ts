@@ -81,6 +81,7 @@ export type MonthlyCalculationDetails = {
 
 const CLIENT_ATTACHMENTS_BUCKET = "documents";
 const COPEL_DOCUMENT_TYPE = "COPEL_PDF";
+const ONDESC_DOCUMENT_TYPE = "ONDESC_PDF";
 
 function readString(row: Record<string, unknown>, keys: string[]): string {
   for (const key of keys) {
@@ -694,6 +695,34 @@ export async function getCopelDocumentByCalculationIdOrThrow(
   return attachment;
 }
 
+export async function getOndescDocumentByCalculationId(
+  supabase: DbClient,
+  calculationId: string,
+): Promise<ClientAttachment | null> {
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*")
+    .eq("calculation_id", calculationId)
+    .eq("doc_type", ONDESC_DOCUMENT_TYPE)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Erro ao buscar documento ONDESC: ${error.message}`);
+  }
+
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  const attachment = mapAttachmentRow(data as Record<string, unknown>);
+
+  if (!attachment.id) {
+    return null;
+  }
+
+  return attachment;
+}
+
 export async function getClientAttachmentOrThrow(
   supabase: DbClient,
   clientId: string,
@@ -715,6 +744,12 @@ export async function getClientAttachmentOrThrow(
 function buildClientPdfPath(clientId: string, filename: string): string {
   const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
   return `clients/${clientId}/${Date.now()}-${safeName}`;
+}
+
+function buildOndescPdfPath(clientId: string, calculationId: string): string {
+  const safeClientId = clientId.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const safeCalculationId = calculationId.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return `clients/${safeClientId}/ondesc/${safeCalculationId}.pdf`;
 }
 
 export async function uploadClientAttachment(
@@ -794,6 +829,55 @@ export async function downloadClientPdfFromStorage(
   }
 
   return await data.arrayBuffer();
+}
+
+export async function saveOndescPdfDocument(
+  supabase: DbClient,
+  args: {
+    clientId: string;
+    calculationId: string;
+    refMonth: string;
+    filename: string;
+    pdfBytes: ArrayBuffer;
+  },
+): Promise<void> {
+  const path = buildOndescPdfPath(args.clientId, args.calculationId);
+  const safeFilename =
+    args.filename.trim().replace(/[^a-zA-Z0-9._-]/g, "_") ||
+    "fatura-ondesc.pdf";
+
+  const { error: uploadError } = await supabase.storage
+    .from(CLIENT_ATTACHMENTS_BUCKET)
+    .upload(path, args.pdfBytes, {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+
+  if (uploadError) {
+    throw new Error(
+      `Erro ao enviar fatura ONDESC para o storage: ${uploadError.message}`,
+    );
+  }
+
+  const payload: Record<string, unknown> = {
+    client_id: args.clientId,
+    calculation_id: args.calculationId,
+    doc_type: ONDESC_DOCUMENT_TYPE,
+    ref_month: args.refMonth,
+    bucket: CLIENT_ATTACHMENTS_BUCKET,
+    path,
+    filename: safeFilename,
+    mime_type: "application/pdf",
+    size_bytes: args.pdfBytes.byteLength,
+  };
+
+  const { error } = await supabase.from("documents").upsert(payload, {
+    onConflict: "calculation_id,doc_type",
+  });
+
+  if (error) {
+    throw new Error(`Erro ao salvar documento ONDESC: ${error.message}`);
+  }
 }
 
 export async function updateMonthlyCalculation(

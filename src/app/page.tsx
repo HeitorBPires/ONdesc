@@ -81,7 +81,12 @@ function formatRefMonthLabel(refMonth: string): string {
 
   const month = Number(match[1]);
   const year = Number(match[2]);
-  if (!Number.isFinite(month) || month < 1 || month > 12 || !Number.isFinite(year)) {
+  if (
+    !Number.isFinite(month) ||
+    month < 1 ||
+    month > 12 ||
+    !Number.isFinite(year)
+  ) {
     return refMonth;
   }
 
@@ -114,12 +119,11 @@ export default function ClientsPage() {
   const [activeMenuClientId, setActiveMenuClientId] = useState<string | null>(
     null,
   );
-  const [historyModalClient, setHistoryModalClient] = useState<ClientRow | null>(
-    null,
-  );
-  const [historyRows, setHistoryRows] = useState<MonthlyCalculationHistoryRow[]>(
-    [],
-  );
+  const [historyModalClient, setHistoryModalClient] =
+    useState<ClientRow | null>(null);
+  const [historyRows, setHistoryRows] = useState<
+    MonthlyCalculationHistoryRow[]
+  >([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
 
@@ -479,7 +483,8 @@ export default function ClientsPage() {
                   Histórico de faturas
                 </h2>
                 <p className="text-sm text-gray-600">
-                  {historyModalClient.nome || "Cliente"} ({historyModalClient.uc || "-"})
+                  {historyModalClient.nome || "Cliente"} (
+                  {historyModalClient.uc || "-"})
                 </p>
               </div>
 

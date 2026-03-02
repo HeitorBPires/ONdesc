@@ -25,6 +25,7 @@ import {
   getCopelDocumentByCalculationIdOrThrow,
   getMonthlyCalculationByClientMonthOrThrow,
   getRefMonth,
+  saveOndescPdfDocument,
   updateClientStatus,
 } from "@/lib/supabase/data-access";
 
@@ -301,6 +302,28 @@ export async function POST(req: Request) {
           })
         ).id;
 
+    function pegarPrimeiroNome(nome: string): string {
+      return nome.trim().split(/\s+/).slice(0, 1).join(" ");
+    }
+
+    const invoiceFilename = `ONDESC_${pegarPrimeiroNome(data.cliente.nome)}_${data.uc}_${data.mesReferencia.replace("/", "")}.pdf`;
+    const invoiceRefMonth = normalizeRefMonth(data.mesReferencia) ?? getRefMonth();
+
+    try {
+      await saveOndescPdfDocument(supabase, {
+        clientId,
+        calculationId,
+        refMonth: invoiceRefMonth,
+        filename: invoiceFilename,
+        pdfBytes: invoiceBuffer,
+      });
+    } catch (storageError) {
+      console.error(
+        "Erro ao salvar fatura ONDESC no storage para histórico:",
+        storageError,
+      );
+    }
+
     const attachment = await getCopelDocumentByCalculationIdOrThrow(
       supabase,
       calculationId,
@@ -365,14 +388,10 @@ export async function POST(req: Request) {
       );
     }
 
-    function pegarPrimeiroNome(nome: string): string {
-      return nome.trim().split(/\s+/).slice(0, 1).join(" ");
-    }
-
     return new NextResponse(finalPdfArrayBuffer, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="ONDESC_${pegarPrimeiroNome(data.cliente.nome)}_${data.uc}_${data.mesReferencia.replace("/", "")}.pdf"`,
+        "Content-Disposition": `inline; filename="${invoiceFilename}"`,
       },
     });
   } catch (err) {
