@@ -9,6 +9,7 @@ import { validateDadosFaturaCopel } from "../../../../lib/validateDadosUsuario";
 import {
   downloadClientPdfFromStorage,
   getClientOrThrow,
+  getClientDetailsOrThrow,
   getCopelDocumentByCalculationIdOrThrow,
   getMonthlyCalculationByClientMonthOrThrow,
   getRefMonth,
@@ -165,6 +166,7 @@ export async function POST(req: NextRequest) {
     const refMonth = getRefMonth();
 
     const client = await getClientOrThrow(supabase, clientId);
+    const clientDetails = await getClientDetailsOrThrow(supabase, clientId);
     const monthlyCalculation = await getMonthlyCalculationByClientMonthOrThrow(
       supabase,
       {
@@ -349,6 +351,22 @@ export async function POST(req: NextRequest) {
 
     const dadosUsuario = extractDadosFaturaCopel(text);
 
+    // Prioriza dados cadastrais da tabela clients e mantém fallback para o PDF.
+    dadosUsuario.uc = clientDetails.uc || dadosUsuario.uc;
+    dadosUsuario.cliente = {
+      nome: clientDetails.nome || dadosUsuario.cliente.nome,
+      endereco: clientDetails.endereco || dadosUsuario.cliente.endereco,
+      cep: clientDetails.cep || dadosUsuario.cliente.cep,
+      cidade: clientDetails.cidade || dadosUsuario.cliente.cidade,
+      estado: clientDetails.estado || dadosUsuario.cliente.estado,
+      documento: {
+        tipo: clientDetails.documentoValor
+          ? clientDetails.documentoTipo
+          : dadosUsuario.cliente.documento.tipo,
+        valor: clientDetails.documentoValor || dadosUsuario.cliente.documento.valor,
+      },
+    };
+
     if (clientDueDateRaw) {
       try {
         dadosUsuario.vencimento = resolveDueDateFromClientConfig(
@@ -397,6 +415,7 @@ export async function POST(req: NextRequest) {
           proxima_leitura: dadosUsuario.proximaLeitura,
           copel_valor: resultado.totalFaturaCopel,
           consumo_kwh: resultado.consumoMes,
+          energia_injetada_kwh: resultado.energiaInjetadaKwh,
           tarifa_copel: resultado.tarifaCopel,
           copel_items: resultado.itens,
           valor_sem_ondesc: resultado.valorSemDesconto,

@@ -28,6 +28,7 @@ import { useRouter } from "next/navigation";
 
 interface ResultsDisplayProps {
   response: ApiResponse<ResultadoFatura>;
+  readOnly?: boolean;
 }
 
 function splitErrors(errors: ApiError[] = []) {
@@ -61,6 +62,7 @@ function errorToast(message: string) {
 
 export default function ResultsDisplay({
   response,
+  readOnly = false,
 }: ResultsDisplayProps) {
   const router = useRouter();
   const { critical, warning } = splitErrors(response.errors);
@@ -406,37 +408,37 @@ export default function ResultsDisplay({
         </div>
       </div>
 
-      {/* CTA - Gerar Boleto (principal) */}
-      {/* Ação principal */}
-      <button
-        onClick={handleGenerateBoleto}
-        disabled={isGenerating}
-        className={[
-          "w-full",
-          "inline-flex items-center justify-center gap-2",
-          "rounded-xl px-6 py-4",
-          "text-base font-semibold",
-          "text-white",
-          "bg-linear-to-r from-blue-600 to-indigo-600",
-          "shadow-lg shadow-indigo-600/20",
-          "hover:brightness-110 transition",
-          "active:scale-[0.99]",
-          "focus:outline-none focus:ring-4 focus:ring-indigo-500/25",
-          "disabled:opacity-60 disabled:cursor-not-allowed",
-        ].join(" ")}
-      >
-        {isGenerating ? (
-          <>
-            <span className="h-5 w-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-            Gerando boleto...
-          </>
-        ) : (
-          <>
-            <FileText className="h-5 w-5" />
-            Gerar boleto com estes valores
-          </>
-        )}
-      </button>
+      {!readOnly && (
+        <button
+          onClick={handleGenerateBoleto}
+          disabled={isGenerating}
+          className={[
+            "w-full",
+            "inline-flex items-center justify-center gap-2",
+            "rounded-xl px-6 py-4",
+            "text-base font-semibold",
+            "text-white",
+            "bg-linear-to-r from-blue-600 to-indigo-600",
+            "shadow-lg shadow-indigo-600/20",
+            "hover:brightness-110 transition",
+            "active:scale-[0.99]",
+            "focus:outline-none focus:ring-4 focus:ring-indigo-500/25",
+            "disabled:opacity-60 disabled:cursor-not-allowed",
+          ].join(" ")}
+        >
+          {isGenerating ? (
+            <>
+              <span className="h-5 w-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+              Gerando boleto...
+            </>
+          ) : (
+            <>
+              <FileText className="h-5 w-5" />
+              Gerar boleto com estes valores
+            </>
+          )}
+        </button>
+      )}
 
       {/* Tabela de Itens */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-sm transition">

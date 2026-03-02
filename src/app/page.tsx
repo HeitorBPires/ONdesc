@@ -2,7 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, Lock, Upload, XCircle } from "lucide-react";
+import {
+  CalendarDays,
+  CheckCircle2,
+  Loader2,
+  Lock,
+  MoreVertical,
+  Upload,
+  X,
+  XCircle,
+} from "lucide-react";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 
 type ClientRow = {
@@ -20,6 +29,19 @@ type ClientRow = {
 type ClientsResponse = {
   success: boolean;
   data?: ClientRow[];
+  error?: string;
+};
+
+type MonthlyCalculationHistoryRow = {
+  id: string;
+  clientId: string;
+  refMonth: string;
+  stage: string;
+};
+
+type MonthlyCalculationHistoryResponse = {
+  success: boolean;
+  data?: MonthlyCalculationHistoryRow[];
   error?: string;
 };
 
@@ -53,6 +75,33 @@ function formatPhone(phone: string): string {
   return phone || "-";
 }
 
+function formatRefMonthLabel(refMonth: string): string {
+  const match = (refMonth || "").match(/^(\d{2})-(\d{4})$/);
+  if (!match) return refMonth || "-";
+
+  const month = Number(match[1]);
+  const year = Number(match[2]);
+  if (!Number.isFinite(month) || month < 1 || month > 12 || !Number.isFinite(year)) {
+    return refMonth;
+  }
+
+  const monthLabel = new Date(year, month - 1, 1).toLocaleString("pt-BR", {
+    month: "long",
+  });
+
+  return `${monthLabel.charAt(0).toUpperCase()}${monthLabel.slice(1)} de ${year}`;
+}
+
+function formatStageLabel(stage: string): string {
+  if (stage === "CALCULATED") return "Calculado";
+  if (stage === "COPEL_UPLOADED") return "PDF Enviado";
+  return stage || "-";
+}
+
+function canOpenCalculation(stage: string): boolean {
+  return stage === "CALCULATED";
+}
+
 export default function ClientsPage() {
   const router = useRouter();
   const [clients, setClients] = useState<ClientRow[]>([]);
@@ -62,6 +111,17 @@ export default function ClientsPage() {
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  const [activeMenuClientId, setActiveMenuClientId] = useState<string | null>(
+    null,
+  );
+  const [historyModalClient, setHistoryModalClient] = useState<ClientRow | null>(
+    null,
+  );
+  const [historyRows, setHistoryRows] = useState<MonthlyCalculationHistoryRow[]>(
+    [],
+  );
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   const loadClients = useCallback(
     async (showLoading = false) => {
@@ -102,6 +162,17 @@ export default function ClientsPage() {
   useEffect(() => {
     void loadClients(true);
   }, [loadClients]);
+
+  useEffect(() => {
+    function onEsc(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setHistoryModalClient(null);
+      setActiveMenuClientId(null);
+    }
+
+    window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, []);
 
   async function handleUpload(clientId: string, file: File) {
     setUploadingClientId(clientId);
@@ -146,6 +217,53 @@ export default function ClientsPage() {
     } finally {
       setUploadingClientId(null);
     }
+  }
+
+  async function openHistoryModal(client: ClientRow) {
+    setActiveMenuClientId(null);
+    setHistoryModalClient(client);
+    setHistoryRows([]);
+    setHistoryError(null);
+    setIsHistoryLoading(true);
+
+    try {
+      const response = await fetch(`/api/clients/${client.id}/calculations`, {
+        cache: "no-store",
+      });
+
+      if (response.status === 401) {
+        router.replace("/login");
+        return;
+      }
+
+      const payload =
+        (await response.json()) as MonthlyCalculationHistoryResponse;
+
+      if (!response.ok || !payload.success) {
+        setHistoryError(payload.error || "Erro ao buscar histórico.");
+        return;
+      }
+
+      setHistoryRows(Array.isArray(payload.data) ? payload.data : []);
+    } catch {
+      setHistoryError("Erro de comunicação ao buscar histórico.");
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  }
+
+  function closeHistoryModal() {
+    setHistoryModalClient(null);
+    setHistoryRows([]);
+    setHistoryError(null);
+    setIsHistoryLoading(false);
+  }
+
+  function openCalculationHistory(calculationId: string) {
+    if (!historyModalClient) return;
+    router.push(
+      `/calculation/history?clientId=${encodeURIComponent(historyModalClient.id)}&calculationId=${encodeURIComponent(calculationId)}`,
+    );
   }
 
   return (
@@ -286,7 +404,7 @@ export default function ClientsPage() {
                       </div>
                     </div>
 
-                    <div className="col-span-2 flex justify-end">
+                    <div className="col-span-2 flex justify-end gap-2">
                       <div className="group relative inline-flex">
                         <button
                           disabled={!client.canCalculate}
@@ -311,6 +429,32 @@ export default function ClientsPage() {
                             </div>
                           )}
                       </div>
+
+                      <div className="relative">
+                        <button
+                          onClick={() =>
+                            setActiveMenuClientId((prev) =>
+                              prev === client.id ? null : client.id,
+                            )
+                          }
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-100"
+                          aria-label="Abrir ações"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+
+                        {activeMenuClientId === client.id && (
+                          <div className="absolute right-0 top-10 z-20 w-48 rounded-lg border border-gray-200 bg-white p-1 shadow-lg">
+                            <button
+                              onClick={() => void openHistoryModal(client)}
+                              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
+                            >
+                              <CalendarDays className="h-4 w-4 text-gray-500" />
+                              Históricos de faturas
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -319,6 +463,94 @@ export default function ClientsPage() {
           )}
         </div>
       </div>
+
+      {historyModalClient && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          onClick={closeHistoryModal}
+        >
+          <div
+            className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Histórico de faturas
+                </h2>
+                <p className="text-sm text-gray-600">
+                  {historyModalClient.nome || "Cliente"} ({historyModalClient.uc || "-"})
+                </p>
+              </div>
+
+              <button
+                onClick={closeHistoryModal}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-100"
+                aria-label="Fechar modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
+              {isHistoryLoading ? (
+                <div className="py-10 text-center text-gray-500">
+                  <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin text-gray-500" />
+                  Carregando histórico...
+                </div>
+              ) : historyError ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {historyError}
+                </div>
+              ) : historyRows.length === 0 ? (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-600">
+                  Nenhum histórico encontrado para este cliente.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {historyRows.map((row) => (
+                    <div
+                      key={row.id}
+                      className={`rounded-xl border p-4 ${
+                        canOpenCalculation(row.stage)
+                          ? "border-blue-200 bg-blue-50/40"
+                          : "border-gray-200 bg-white"
+                      }`}
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Mês de referência
+                      </p>
+                      <p className="mt-1 text-base font-semibold text-gray-900">
+                        {formatRefMonthLabel(row.refMonth)}
+                      </p>
+
+                      <div className="mt-3 inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700">
+                        {formatStageLabel(row.stage)}
+                      </div>
+
+                      <div className="mt-3">
+                        <button
+                          disabled={!canOpenCalculation(row.stage)}
+                          onClick={() => openCalculationHistory(row.id)}
+                          className={`w-full rounded-lg px-3 py-2 text-sm font-semibold ${
+                            canOpenCalculation(row.stage)
+                              ? "bg-blue-600 text-white hover:bg-blue-700"
+                              : "cursor-not-allowed bg-gray-200 text-gray-500"
+                          }`}
+                        >
+                          {canOpenCalculation(row.stage)
+                            ? "Visualizar cálculo"
+                            : "Cálculo não finalizado"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

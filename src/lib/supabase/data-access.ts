@@ -37,6 +37,48 @@ export type MonthlyCalculation = {
   stage: string;
 };
 
+export type MonthlyCalculationHistoryItem = {
+  id: string;
+  clientId: string;
+  refMonth: string;
+  stage: string;
+};
+
+export type ClientDetails = {
+  id: string;
+  nome: string;
+  uc: string;
+  endereco: string;
+  cep: string;
+  cidade: string;
+  estado: string;
+  documentoTipo: "CPF" | "CNPJ";
+  documentoValor: string;
+};
+
+export type MonthlyCalculationDetails = {
+  id: string;
+  clientId: string;
+  refMonth: string;
+  stage: string;
+  uc: string;
+  mesReferencia: string;
+  vencimento: string;
+  proximaLeitura: string;
+  copelItems: Array<Record<string, unknown>>;
+  energiaInjetadaKwh: number | null;
+  valorSemOndesc: number | null;
+  valorComOndesc: number | null;
+  valorDesconto: number | null;
+  valorTotalOndesc: number | null;
+  valorTotalCopel: number | null;
+  tarifaCopel: number | null;
+  tarifaOndesc: number | null;
+  consumoKwh: number | null;
+  percentualDesconto: number | null;
+  modoCalculo: "automatico" | "porcentagem" | "taxa";
+};
+
 const CLIENT_ATTACHMENTS_BUCKET = "documents";
 const COPEL_DOCUMENT_TYPE = "COPEL_PDF";
 
@@ -73,11 +115,12 @@ function normalizeStatus(value: string): "PENDENTE" | "PAGO" | "AGUARD. PAG." {
   return "PENDENTE";
 }
 
-const STATUS_SORT_ORDER: Record<"PENDENTE" | "AGUARD. PAG." | "PAGO", number> = {
-  PENDENTE: 0,
-  "AGUARD. PAG.": 1,
-  PAGO: 2,
-};
+const STATUS_SORT_ORDER: Record<"PENDENTE" | "AGUARD. PAG." | "PAGO", number> =
+  {
+    PENDENTE: 0,
+    "AGUARD. PAG.": 1,
+    PAGO: 2,
+  };
 
 function mapClientRow(row: Record<string, unknown>): ClientListItem {
   const status = normalizeStatus(readString(row, ["status"]) || "PENDENTE");
@@ -127,6 +170,102 @@ function mapMonthlyCalculationRow(
     clientId: readString(row, ["client_id", "clientId"]),
     refMonth: readString(row, ["ref_month", "refMonth"]),
     stage: readString(row, ["stage"]),
+  };
+}
+
+function mapMonthlyCalculationHistoryRow(
+  row: Record<string, unknown>,
+): MonthlyCalculationHistoryItem {
+  return {
+    id: readString(row, ["id"]),
+    clientId: readString(row, ["client_id", "clientId"]),
+    refMonth: readString(row, ["ref_month", "refMonth"]),
+    stage: readString(row, ["stage"]),
+  };
+}
+
+function normalizeDocTipo(value: string): "CPF" | "CNPJ" {
+  return value.trim().toUpperCase() === "CNPJ" ? "CNPJ" : "CPF";
+}
+
+function pickDocumento(
+  row: Record<string, unknown>,
+): { tipo: "CPF" | "CNPJ"; valor: string } {
+  const cnpj = readString(row, ["cnpj", "documento_cnpj"]);
+  if (cnpj) return { tipo: "CNPJ", valor: cnpj };
+
+  const cpf = readString(row, ["cpf", "documento_cpf"]);
+  if (cpf) return { tipo: "CPF", valor: cpf };
+
+  const docTipo = normalizeDocTipo(
+    readString(row, ["documento_tipo", "tipo_documento", "doc_type"]),
+  );
+  const docValor = readString(row, [
+    "documento",
+    "documento_valor",
+    "doc",
+    "doc_value",
+  ]);
+
+  return { tipo: docTipo, valor: docValor };
+}
+
+function mapClientDetailsRow(row: Record<string, unknown>): ClientDetails {
+  const documento = pickDocumento(row);
+  return {
+    id: readString(row, ["id"]),
+    nome: readString(row, ["nome", "name"]),
+    uc: readString(row, ["uc", "unidade_consumidora"]),
+    endereco: readString(row, ["endereco", "address", "logradouro"]),
+    cep: readString(row, ["cep", "zipcode"]),
+    cidade: readString(row, ["cidade", "city"]),
+    estado: readString(row, ["estado", "state", "uf"]).toUpperCase(),
+    documentoTipo: documento.tipo,
+    documentoValor: documento.valor,
+  };
+}
+
+function normalizeMode(value: string): "automatico" | "porcentagem" | "taxa" {
+  if (value === "taxa") return "taxa";
+  if (value === "porcentagem") return "porcentagem";
+  return "automatico";
+}
+
+function mapMonthlyCalculationDetailsRow(
+  row: Record<string, unknown>,
+): MonthlyCalculationDetails {
+  const rawItems = row.copel_items;
+  const copelItems = Array.isArray(rawItems)
+    ? rawItems.filter(
+        (item): item is Record<string, unknown> =>
+          typeof item === "object" && item !== null,
+      )
+    : [];
+
+  return {
+    id: readString(row, ["id"]),
+    clientId: readString(row, ["client_id", "clientId"]),
+    refMonth: readString(row, ["ref_month", "refMonth"]),
+    stage: readString(row, ["stage"]),
+    uc: readString(row, ["uc"]),
+    mesReferencia: readString(row, ["mes_referencia"]),
+    vencimento: readString(row, ["copel_data_vencimento"]),
+    proximaLeitura: readString(row, ["proxima_leitura"]),
+    copelItems,
+    energiaInjetadaKwh: readNumberOrNull(row, ["energia_injetada_kwh"]),
+    valorSemOndesc: readNumberOrNull(row, ["valor_sem_ondesc"]),
+    valorComOndesc: readNumberOrNull(row, ["valor_com_ondesc"]),
+    valorDesconto: readNumberOrNull(row, ["valor_desconto"]),
+    valorTotalOndesc: readNumberOrNull(row, ["valor_total_ondesc"]),
+    valorTotalCopel: readNumberOrNull(row, [
+      "valor_total_copel",
+      "copel_valor",
+    ]),
+    tarifaCopel: readNumberOrNull(row, ["tarifa_copel"]),
+    tarifaOndesc: readNumberOrNull(row, ["tarifa_ondesc"]),
+    consumoKwh: readNumberOrNull(row, ["consumo_kwh"]),
+    percentualDesconto: readNumberOrNull(row, ["percentual_desconto"]),
+    modoCalculo: normalizeMode(readString(row, ["modo_calculo"])),
   };
 }
 
@@ -332,7 +471,9 @@ export async function canUploadCopelPdf(
   clientId: string,
 ): Promise<{ allowed: boolean; status: string }> {
   const client = await getClientOrThrow(supabase, clientId);
-  const status = normalizeStatus(await ensureClientStatusUpToDate(supabase, client));
+  const status = normalizeStatus(
+    await ensureClientStatusUpToDate(supabase, client),
+  );
   return {
     allowed: status === "PENDENTE",
     status,
@@ -345,7 +486,8 @@ export async function updateClientStatus(
   status: "PENDENTE" | "PAGO" | "Aguard. Pag." | "AGUARD. PAG.",
 ): Promise<void> {
   const normalized = normalizeStatus(status);
-  const payloadStatus = normalized === "AGUARD. PAG." ? "Aguard. Pag." : normalized;
+  const payloadStatus =
+    normalized === "AGUARD. PAG." ? "Aguard. Pag." : normalized;
 
   const { error } = await supabase
     .from("clients")
@@ -373,6 +515,27 @@ export async function getClientOrThrow(supabase: DbClient, clientId: string) {
   }
 
   return mapClientRow(data as Record<string, unknown>);
+}
+
+export async function getClientDetailsOrThrow(
+  supabase: DbClient,
+  clientId: string,
+): Promise<ClientDetails> {
+  const { data, error } = await supabase
+    .from("clients")
+    .select("*")
+    .eq("id", clientId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Erro ao buscar cliente: ${error.message}`);
+  }
+
+  if (!data || typeof data !== "object") {
+    throw new Error("Cliente não encontrado.");
+  }
+
+  return mapClientDetailsRow(data as Record<string, unknown>);
 }
 
 export async function upsertMonthlyCalculationByClientMonth(
@@ -424,6 +587,83 @@ export async function getMonthlyCalculationByClientMonthOrThrow(
   }
 
   return mapMonthlyCalculationRow(data as Record<string, unknown>);
+}
+
+export async function listMonthlyCalculationsByClient(
+  supabase: DbClient,
+  clientId: string,
+): Promise<MonthlyCalculationHistoryItem[]> {
+  const { data, error } = await supabase
+    .from("monthly_calculations")
+    .select("id, client_id, ref_month, stage")
+    .eq("client_id", clientId);
+
+  if (error) {
+    throw new Error(`Erro ao buscar histórico de cálculos: ${error.message}`);
+  }
+
+  const history = (Array.isArray(data) ? data : [])
+    .filter(
+      (item): item is Record<string, unknown> =>
+        typeof item === "object" &&
+        item !== null &&
+        "id" in item &&
+        "client_id" in item &&
+        "ref_month" in item &&
+        "stage" in item,
+    )
+    .map(mapMonthlyCalculationHistoryRow)
+    .filter((item) => item.id && item.refMonth);
+
+  history.sort((a, b) => parseRefMonth(b.refMonth) - parseRefMonth(a.refMonth));
+
+  return history;
+}
+
+export async function getMonthlyCalculationDetailsByIdOrThrow(
+  supabase: DbClient,
+  args: { clientId: string; calculationId: string },
+): Promise<MonthlyCalculationDetails> {
+  const { data, error } = await supabase
+    .from("monthly_calculations")
+    .select(
+      [
+        "id",
+        "client_id",
+        "ref_month",
+        "stage",
+        "uc",
+        "mes_referencia",
+        "copel_data_vencimento",
+        "proxima_leitura",
+        "copel_items",
+        "energia_injetada_kwh",
+        "valor_sem_ondesc",
+        "valor_com_ondesc",
+        "valor_desconto",
+        "valor_total_ondesc",
+        "valor_total_copel",
+        "copel_valor",
+        "tarifa_copel",
+        "tarifa_ondesc",
+        "consumo_kwh",
+        "percentual_desconto",
+        "modo_calculo",
+      ].join(","),
+    )
+    .eq("client_id", args.clientId)
+    .eq("id", args.calculationId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Erro ao buscar cálculo mensal: ${error.message}`);
+  }
+
+  if (!data || typeof data !== "object") {
+    throw new Error("Cálculo mensal não encontrado.");
+  }
+
+  return mapMonthlyCalculationDetailsRow(data as Record<string, unknown>);
 }
 
 export async function getCopelDocumentByCalculationIdOrThrow(
