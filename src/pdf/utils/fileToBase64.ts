@@ -9,6 +9,7 @@ function getMimeByExtension(ext: string) {
   if (normalized === "png") return "image/png";
   if (normalized === "jpg" || normalized === "jpeg") return "image/jpeg";
   if (normalized === "webp") return "image/webp";
+  if (normalized === "svg") return "image/svg+xml";
 
   return "application/octet-stream";
 }

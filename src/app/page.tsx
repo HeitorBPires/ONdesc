@@ -13,6 +13,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { SignOutButton } from "@/components/auth/SignOutButton";
+import { SimulationPdfGenerator } from "@/components/SimulationPdfGenerator";
 
 type ClientRow = {
   id: string;
@@ -285,6 +286,7 @@ export default function ClientsPage() {
             {(isRefreshing || isLoading) && (
               <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
             )}
+            <SimulationPdfGenerator />
             <SignOutButton />
           </div>
         </div>
