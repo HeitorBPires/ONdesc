@@ -650,7 +650,12 @@ export default function SimulationEconomyPdf({
             >
               ≈
             </Text>
-            <Text style={styles.heroSubText}>
+            <Text
+              style={[
+                styles.heroSubText,
+                { marginLeft: data.hasApproxSymbolFont ? 0 : 2 },
+              ]}
+            >
               {formatCurrencyBRL(economiaMensal)}/mês
             </Text>
           </View>
