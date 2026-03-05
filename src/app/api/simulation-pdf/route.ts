@@ -18,33 +18,22 @@ import {
 export const runtime = "nodejs";
 
 const APPROX_SYMBOL_FONT_FAMILY = "OndescApproxSymbol";
+const APPROX_SYMBOL_FONT_PATH = path.join(
+  process.cwd(),
+  "public",
+  "fonts",
+  "Arial.ttf",
+);
 let approxSymbolFontRegistered = false;
-
-function resolveApproxSymbolFontPath(): string | null {
-  const candidates = [
-    path.join(process.cwd(), "public", "fonts", "Arial.ttf"),
-    "/System/Library/Fonts/Supplemental/Arial.ttf",
-    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-  ];
-
-  for (const candidate of candidates) {
-    if (fsSync.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-
-  return null;
-}
 
 function ensureApproxSymbolFont(): boolean {
   if (approxSymbolFontRegistered) return true;
 
-  const fontPath = resolveApproxSymbolFontPath();
-  if (!fontPath) return false;
+  if (!fsSync.existsSync(APPROX_SYMBOL_FONT_PATH)) return false;
 
   Font.register({
     family: APPROX_SYMBOL_FONT_FAMILY,
-    src: fontPath,
+    src: APPROX_SYMBOL_FONT_PATH,
   });
   approxSymbolFontRegistered = true;
 
