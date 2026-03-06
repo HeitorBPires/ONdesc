@@ -38,6 +38,7 @@ type MonthlyCalculationHistoryRow = {
   clientId: string;
   refMonth: string;
   stage: string;
+  invoiceStatus: string | null;
 };
 
 type MonthlyCalculationHistoryResponse = {
@@ -46,9 +47,12 @@ type MonthlyCalculationHistoryResponse = {
   error?: string;
 };
 
-function normalizeStatus(status: string): "PENDENTE" | "PAGO" | "AGUARD. PAG." {
+function normalizeStatus(
+  status: string,
+): "PENDENTE" | "AGUARD. PAG." | "VENCIDO" | "PAGO" {
   const value = (status || "").trim().toUpperCase();
   if (value === "PAGO") return "PAGO";
+  if (value === "VENCIDO") return "VENCIDO";
   if (value === "AGUARD. PAG.") return "AGUARD. PAG.";
   return "PENDENTE";
 }
@@ -56,6 +60,7 @@ function normalizeStatus(status: string): "PENDENTE" | "PAGO" | "AGUARD. PAG." {
 function formatStatusLabel(status: string): string {
   const normalized = normalizeStatus(status);
   if (normalized === "AGUARD. PAG.") return "Aguard. Pag.";
+  if (normalized === "VENCIDO") return "Vencido";
   if (normalized === "PAGO") return "Pago";
   return "Pendente";
 }
@@ -102,6 +107,63 @@ function formatStageLabel(stage: string): string {
   if (stage === "CALCULATED") return "Calculado";
   if (stage === "COPEL_UPLOADED") return "PDF Enviado";
   return stage || "-";
+}
+
+function normalizeInvoiceStatus(
+  status: string | null | undefined,
+):
+  | "PAGO"
+  | "VENCIDO"
+  | "AGUARD. PAG."
+  | "PENDENTE"
+  | "SEM_COBRANCA"
+  | "OUTRO" {
+  const value = (status || "").trim().toUpperCase();
+  if (!value) return "SEM_COBRANCA";
+
+  if (
+    value === "PAGO" ||
+    value === "RECEIVED" ||
+    value === "CONFIRMED" ||
+    value === "PAYMENT_RECEIVED" ||
+    value === "PAYMENT_CONFIRMED"
+  ) {
+    return "PAGO";
+  }
+
+  if (value === "VENCIDO" || value === "OVERDUE" || value === "PAYMENT_OVERDUE") {
+    return "VENCIDO";
+  }
+
+  if (value === "AGUARD. PAG." || value === "AWAITING_PAYMENT") {
+    return "AGUARD. PAG.";
+  }
+
+  if (value === "PENDENTE" || value === "PENDING") {
+    return "PENDENTE";
+  }
+
+  return "OUTRO";
+}
+
+function formatInvoiceStatusLabel(status: string | null | undefined): string {
+  const normalized = normalizeInvoiceStatus(status);
+  if (normalized === "PAGO") return "Pago";
+  if (normalized === "VENCIDO") return "Vencido";
+  if (normalized === "AGUARD. PAG.") return "Aguard. Pag.";
+  if (normalized === "PENDENTE") return "Pendente";
+  if (normalized === "SEM_COBRANCA") return "Sem cobrança";
+  return (status || "").trim() || "Sem cobrança";
+}
+
+function getInvoiceStatusBadgeClass(status: string | null | undefined): string {
+  const normalized = normalizeInvoiceStatus(status);
+  if (normalized === "PAGO") return "bg-emerald-100 text-emerald-800";
+  if (normalized === "VENCIDO") return "bg-rose-100 text-rose-800";
+  if (normalized === "AGUARD. PAG.") return "bg-blue-100 text-blue-800";
+  if (normalized === "PENDENTE") return "bg-amber-100 text-amber-800";
+  if (normalized === "SEM_COBRANCA") return "bg-slate-100 text-slate-700";
+  return "bg-gray-100 text-gray-700";
 }
 
 function canOpenCalculation(stage: string): boolean {
@@ -347,6 +409,8 @@ export default function ClientsPage() {
                         className={`inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-semibold leading-none ${
                           normalizedStatus === "PAGO"
                             ? "bg-emerald-100 text-emerald-800"
+                            : normalizedStatus === "VENCIDO"
+                              ? "bg-rose-100 text-rose-800"
                             : normalizedStatus === "AGUARD. PAG."
                               ? "bg-blue-100 text-blue-800"
                               : "bg-amber-100 text-amber-800"
@@ -531,8 +595,15 @@ export default function ClientsPage() {
                         {formatRefMonthLabel(row.refMonth)}
                       </p>
 
-                      <div className="mt-3 inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700">
-                        {formatStageLabel(row.stage)}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <div className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700">
+                          Etapa: {formatStageLabel(row.stage)}
+                        </div>
+                        <div
+                          className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${getInvoiceStatusBadgeClass(row.invoiceStatus)}`}
+                        >
+                          Fatura: {formatInvoiceStatusLabel(row.invoiceStatus)}
+                        </div>
                       </div>
 
                       <div className="mt-3">

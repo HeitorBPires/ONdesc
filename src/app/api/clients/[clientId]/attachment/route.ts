@@ -51,11 +51,12 @@ export async function POST(
     const uploadPermission = await canUploadCopelPdf(supabase, clientId);
 
     if (!uploadPermission.allowed) {
+      const blockedStatus = uploadPermission.status || "DESCONHECIDO";
       return NextResponse.json(
         {
           success: false,
           error:
-            "Upload bloqueado para cliente com status PAGO. Aguarde o ciclo da próxima leitura.",
+            `Upload bloqueado para cliente com status ${blockedStatus}. Aguarde o próximo ciclo.`,
         },
         { status: 409 },
       );

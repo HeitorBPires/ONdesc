@@ -42,6 +42,7 @@ export type MonthlyCalculationHistoryItem = {
   clientId: string;
   refMonth: string;
   stage: string;
+  invoiceStatus: string | null;
 };
 
 export type ClientDetails = {
@@ -109,19 +110,26 @@ function readNumberOrNull(
   return null;
 }
 
-function normalizeStatus(value: string): "PENDENTE" | "PAGO" | "AGUARD. PAG." {
+type NormalizedClientStatus =
+  | "PENDENTE"
+  | "AGUARD. PAG."
+  | "VENCIDO"
+  | "PAGO";
+
+function normalizeStatus(value: string): NormalizedClientStatus {
   const status = value.trim().toUpperCase();
   if (status === "PAGO") return "PAGO";
+  if (status === "VENCIDO") return "VENCIDO";
   if (status === "AGUARD. PAG.") return "AGUARD. PAG.";
   return "PENDENTE";
 }
 
-const STATUS_SORT_ORDER: Record<"PENDENTE" | "AGUARD. PAG." | "PAGO", number> =
-  {
-    PENDENTE: 0,
-    "AGUARD. PAG.": 1,
-    PAGO: 2,
-  };
+const STATUS_SORT_ORDER: Record<NormalizedClientStatus, number> = {
+  PENDENTE: 0,
+  "AGUARD. PAG.": 1,
+  VENCIDO: 2,
+  PAGO: 3,
+};
 
 function mapClientRow(row: Record<string, unknown>): ClientListItem {
   const status = normalizeStatus(readString(row, ["status"]) || "PENDENTE");
@@ -177,11 +185,18 @@ function mapMonthlyCalculationRow(
 function mapMonthlyCalculationHistoryRow(
   row: Record<string, unknown>,
 ): MonthlyCalculationHistoryItem {
+  const invoiceStatus = readString(row, [
+    "invoice_status",
+    "invoiceStatus",
+    "monthly_invoice_status",
+  ]);
+
   return {
     id: readString(row, ["id"]),
     clientId: readString(row, ["client_id", "clientId"]),
     refMonth: readString(row, ["ref_month", "refMonth"]),
     stage: readString(row, ["stage"]),
+    invoiceStatus: invoiceStatus || null,
   };
 }
 
@@ -484,7 +499,7 @@ export async function canUploadCopelPdf(
 export async function updateClientStatus(
   supabase: DbClient,
   clientId: string,
-  status: "PENDENTE" | "PAGO" | "Aguard. Pag." | "AGUARD. PAG.",
+  status: "PENDENTE" | "PAGO" | "VENCIDO" | "Aguard. Pag." | "AGUARD. PAG.",
 ): Promise<void> {
   const normalized = normalizeStatus(status);
   const payloadStatus =
@@ -603,6 +618,37 @@ export async function listMonthlyCalculationsByClient(
     throw new Error(`Erro ao buscar histórico de cálculos: ${error.message}`);
   }
 
+  const { data: invoicesData, error: invoicesError } = await supabase
+    .from("monthly_invoices")
+    .select("calculation_id, ref_month, status")
+    .eq("client_id", clientId);
+
+  if (invoicesError) {
+    throw new Error(
+      `Erro ao buscar status de invoices mensais: ${invoicesError.message}`,
+    );
+  }
+
+  const statusByCalculationId = new Map<string, string>();
+  const statusByRefMonth = new Map<string, string>();
+
+  for (const item of Array.isArray(invoicesData) ? invoicesData : []) {
+    if (!item || typeof item !== "object") continue;
+
+    const row = item as Record<string, unknown>;
+    const calculationId = readString(row, ["calculation_id", "calculationId"]);
+    const refMonth = readString(row, ["ref_month", "refMonth"]);
+    const status = readString(row, ["status"]);
+
+    if (!status) continue;
+    if (calculationId && !statusByCalculationId.has(calculationId)) {
+      statusByCalculationId.set(calculationId, status);
+    }
+    if (refMonth && !statusByRefMonth.has(refMonth)) {
+      statusByRefMonth.set(refMonth, status);
+    }
+  }
+
   const history = (Array.isArray(data) ? data : [])
     .filter(
       (item): item is { id: unknown; client_id: unknown; ref_month: unknown; stage: unknown } =>
@@ -614,6 +660,13 @@ export async function listMonthlyCalculationsByClient(
         "stage" in item,
     )
     .map((item) => mapMonthlyCalculationHistoryRow(item as Record<string, unknown>))
+    .map((item) => ({
+      ...item,
+      invoiceStatus:
+        statusByCalculationId.get(item.id) ||
+        statusByRefMonth.get(item.refMonth) ||
+        null,
+    }))
     .filter((item) => item.id && item.refMonth);
 
   history.sort((a, b) => parseRefMonth(b.refMonth) - parseRefMonth(a.refMonth));

@@ -3,9 +3,12 @@ type SupabaseEnv = {
   supabaseAnonKey: string;
 };
 
-function readEnv(
-  name: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-) {
+type SupabaseEnvName =
+  | "NEXT_PUBLIC_SUPABASE_URL"
+  | "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+  | "SUPABASE_SERVICE_ROLE_KEY";
+
+function readEnv(name: SupabaseEnvName) {
   const value = process.env[name];
 
   const normalized = value?.trim();
@@ -30,4 +33,16 @@ export function getSupabaseEnv(): SupabaseEnv {
   }
 
   return { supabaseUrl, supabaseAnonKey };
+}
+
+export function getSupabaseServiceRoleKey(): string {
+  const serviceRoleKey = readEnv("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!serviceRoleKey) {
+    throw new Error(
+      "Variavel ausente: configure SUPABASE_SERVICE_ROLE_KEY no .env.local (com valor nao vazio).",
+    );
+  }
+
+  return serviceRoleKey;
 }
