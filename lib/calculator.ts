@@ -125,7 +125,13 @@ export function calculateCopelInvoice(
 
   // base
   const valorSemDesconto = itens
-    .filter((item) => item.valor > 0)
+    .filter((item) => {
+      const unidade = (item.unidade ?? "").toUpperCase().trim();
+
+      if (unidade === "UN") return true;
+
+      return item.valor > 0;
+    })
     .reduce((acc, item) => acc + item.valor, 0);
 
   const valorSemDescontoSemtaxa = itens
@@ -153,6 +159,7 @@ export function calculateCopelInvoice(
     (acc, item) => acc + Math.abs(item.quantidade),
     0,
   );
+  console.log("energiaInjetadaKwh", energiaInjetadaKwh);
 
   // determinar modo
   let modoCalculo: "automatico" | "taxa" | "porcentagem" = "automatico";
@@ -190,11 +197,11 @@ export function calculateCopelInvoice(
       valorSemDescontoSemtaxa,
     );
 
-  const consumoMes =
-    itens.find((item) => item.descricao.includes("ENERGIA ELET CONSUMO"))
-      ?.quantidade || 0;
+  const consumoMes = itens
+    .filter((item) => item.descricao?.includes("ENERGIA ELET CONSUMO"))
+    .reduce((total, item) => total + (item.quantidade || 0), 0);
 
-  const tarifaCopel = valorSemDescontoSemtaxa / consumoMes;
+  const tarifaCopel = consumoMes > 0 ? valorSemDescontoSemtaxa / consumoMes : 0;
 
   return {
     itens,

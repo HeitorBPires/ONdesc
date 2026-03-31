@@ -3,7 +3,7 @@ export function calcularMetricas(
   tarifaNovaFatura: number,
   totalFaturaCopel: number,
   totalFaturaCopelSemTaxas: number,
-  valorSemDescontoSemtaxa: number
+  valorSemDescontoSemtaxa: number,
 ) {
   const valorNovaFatura = energiaInjetadaKwh * tarifaNovaFatura;
 
@@ -29,7 +29,7 @@ export function encontrarTarifaPorPorcentagem(
   totalFaturaCopel: number,
   totalFaturaCopelSemTaxas: number,
   valorSemDescontoSemtaxa: number,
-  porcentagemDesejada: number
+  porcentagemDesejada: number,
 ) {
   const tarifaMinima = 0.01;
   const tarifaMaxima = 1.5;
@@ -51,7 +51,7 @@ export function encontrarTarifaPorPorcentagem(
       mid,
       totalFaturaCopel,
       totalFaturaCopelSemTaxas,
-      valorSemDescontoSemtaxa
+      valorSemDescontoSemtaxa,
     );
 
     const diff = Math.abs(porcentagemDesconto - porcentagemDesejada);
